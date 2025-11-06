@@ -137,13 +137,13 @@
         </div>
     </div>
 
-    <div id="details-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bg p-4" onclick="closeModal(event)">
+    <div id="details-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bg p-4">
         
-        <div class="modal-content-container bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl overflow-y-auto" onclick="event.stopPropagation()">
+        <div class="modal-content-container bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl overflow-y-auto">
             <div class="p-6">
                 
                 <div class="flex justify-end">
-                    <button onclick="closeModal()" class="text-gray-400 hover:text-white transition duration-200 text-3xl font-bold">&times;</button>
+                    <button id="close-modal-button" class="text-gray-400 hover:text-white transition duration-200 text-3xl font-bold">&times;</button>
                 </div>
 
                 <div id="modal-media" class="media-responsive rounded-lg mb-6 border border-purple-600">
@@ -156,24 +156,37 @@
         </div>
     </div>
 
+    <footer class="text-center p-8 mt-12 border-t border-gray-700">
+        <p class="text-gray-500 text-sm">
+            Please note: This gallery runs on a static JSON feed provided for this project. 
+            Data is limited and may not contain entries for all 9 days, especially after October 1, 2025.
+        </p>
+    </footer>
+
+
     <script>
-        // --- LA SOLUCIÓN DEFINITIVA: FUNCIÓN PRINCIPAL DE INICIALIZACIÓN ---
-        function initializeApp() {
+        // --- FUNCIÓN DE ARRANQUE SEGURA ---
+        // Espera a que la página esté completamente cargada
+        window.onload = function() {
             
-            // --- CONSTANTES Y GLOBALES ---
+            // --- CONSTANTES Y GLOBALES (Definidas DESPUÉS de que el DOM esté listo) ---
             const DATA_URL = 'https://cdn.jsdelivr.net/gh/GCA-Classroom/apod/data.json'; 
 
             const galleryContainer = document.getElementById('gallery-container');
             const loadingIndicator = document.getElementById('loading-indicator');
             const errorMessage = document.getElementById('error-message');
             const errorText = document.getElementById('error-text');
+            const startDateInput = document.getElementById('start-date');
+            const fetchButton = document.getElementById('fetch-button'); 
+
             const detailsModal = document.getElementById('details-modal');
             const modalTitle = document.getElementById('modal-title');
             const modalDate = document.getElementById('modal-date');
             const modalMedia = document.getElementById('modal-media');
             const modalExplanation = document.getElementById('modal-explanation');
-            const startDateInput = document.getElementById('start-date');
-            const fetchButton = document.getElementById('fetch-button'); 
+            const closeModalButton = document.getElementById('close-modal-button');
+            const modalContentContainer = document.querySelector('.modal-content-container');
+
             const factTextElement = document.getElementById('fact-text');
             const didYouKnowSection = document.getElementById('did-you-know');
 
@@ -300,10 +313,13 @@
                     mediaIcon = `<div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center text-xl font-bold text-gray-400">No Content</div>`;
                 }
 
+                // *** LA CORRECCIÓN TÉCNICA (PARTE 1) ***
+                // Ya no usamos 'onclick'
+                // Guardamos los datos JSON directamente en el elemento usando un 'data-attribute'
                 const itemJson = encodeURIComponent(JSON.stringify(item));
 
                 return `
-                    <div class="apod-card rounded-xl overflow-hidden shadow-lg" onclick="openModal('${itemJson}')">
+                    <div class="apod-card rounded-xl overflow-hidden shadow-lg" data-item-json="${itemJson}">
                         <div class="relative pt-[66.666%] bg-gray-700"> 
                             <img src="${mediaUrl}" 
                                  onerror="this.onerror=null;this.src='${item.url || 'https://placehold.co/600x400/161b22/8b5cf6?text=LOAD+ERROR'}';"
@@ -320,13 +336,11 @@
                 `;
             }
 
-            // --- MODAL FUNCTIONS (Assigned to 'window' to work from HTML) ---
-            window.openModal = function(encodedItem) {
-                const item = JSON.parse(decodeURIComponent(encodedItem));
-
+            // --- MODAL FUNCTIONS (Ahora locales, no globales) ---
+            function openModal(item) {
                 modalTitle.textContent = item.title;
                 modalDate.textContent = formatDate(item.date);
-                modalExplanation.textContent = item.explanation; 
+                modalExplanation.textContent = item.explanation; // <-- ESTA ES LA DESCRIPCIÓN
                 modalMedia.innerHTML = ''; 
 
                 let mediaElement;
@@ -341,11 +355,12 @@
                         mediaElement.setAttribute('title', item.title);
                         mediaElement.classList.add('w-full', 'h-full', 'rounded-lg');
                     } else {
+                        // Muestra el link si no es un video incrustable
                         mediaElement = document.createElement('div');
                         mediaElement.classList.add('w-full', 'h-full', 'flex', 'flex-col', 'items-center', 'justify-center', 'text-center', 'text-2xl', 'text-gray-500', 'p-10');
                         mediaElement.innerHTML = `
-                            <p class="mb-4">Video content available at the following link:</p>
-                            <a href="${item.url}" target="_blank" class="text-purple-400 hover:text-purple-300 underline transition duration-300">View External Video</a>
+                            <p class="mb-4">Video content cannot be embedded directly.</p>
+                            <a href="${item.url}" target="_blank" class="text-purple-400 hover:text-purple-300 underline transition duration-300">Click here to View External Video</a>
                         `;
                     }
                 } else if (item.media_type === 'image') {
@@ -366,16 +381,15 @@
                 document.body.classList.add('overflow-hidden');
             }
 
-            window.closeModal = function(event) {
-                if (event && event.target !== detailsModal) return;
-
+            function closeModal() {
                 detailsModal.classList.add('hidden');
                 document.body.classList.remove('overflow-hidden');
-                
                 modalMedia.innerHTML = '';
             }
 
-            // --- EVENT LISTENER (Button handler) ---
+            // --- EVENT LISTENERS (La solución moderna y robusta) ---
+            
+            // 1. Botón de la Galería
             fetchButton.addEventListener('click', () => {
                 if (!isDataLoaded) return; 
 
@@ -388,14 +402,35 @@
                 }
             });
 
+            // 2. Clics en la Galería (para abrir el modal)
+            galleryContainer.addEventListener('click', function(event) {
+                // 'event.target' es lo que se clickeó (ej. la imagen)
+                // '.closest()' encuentra el ancestro 'apod-card' más cercano
+                const card = event.target.closest('.apod-card');
+                
+                if (!card) return; // Si el clic no fue en una tarjeta, no hacer nada
+
+                // Obtener el JSON guardado en el 'data-attribute'
+                const itemJson = card.dataset.itemJson;
+                if (!itemJson) return;
+
+                const item = JSON.parse(decodeURIComponent(itemJson));
+                openModal(item); // Llamar a la función local
+            });
+
+            // 3. Clics para Cerrar el Modal
+            closeModalButton.addEventListener('click', closeModal); // Botón X
+            detailsModal.addEventListener('click', function(event) {
+                // Si el clic es en el fondo oscuro (el modal mismo)
+                if (event.target === detailsModal) {
+                    closeModal();
+                }
+            });
+
             // --- INICIALIZACIÓN ---
             fetchInitialData();
         
-        } // End of initializeApp
-
-        // --- ARRANQUE SEGURO: Ejecuta la aplicación cuando la página esté lista ---
-        window.onload = initializeApp;
-
+        }; // Fin de window.onload
     </script>
 
 </body>
